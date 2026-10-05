@@ -1,10 +1,7 @@
 import "dotenv/config";
 
 import express from "express";
-import type {
-  Request,
-  Response,
-} from "express";
+import type { Request, Response } from "express";
 
 import cors from "cors";
 import rateLimit from "express-rate-limit";
@@ -20,12 +17,31 @@ const app = express();
    CORS
 ========================================= */
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://salon-sigma-ashy.vercel.app",
+];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-    ],
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header
+      // such as server-to-server requests and API testing.
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      console.warn("Blocked by CORS:", origin);
+
+      callback(new Error("Not allowed by CORS"));
+    },
 
     methods: [
       "GET",
@@ -40,6 +56,8 @@ app.use(
       "Content-Type",
       "Authorization",
     ],
+
+    credentials: true,
   })
 );
 
@@ -68,26 +86,18 @@ app.get(
 
 app.get(
   "/api/settings",
-  async (
-    _req: Request,
-    res: Response
-  ) => {
+  async (_req: Request, res: Response) => {
     try {
-      const result =
-        await pool.query(`
-          SELECT key, value
-          FROM settings
-          ORDER BY key
-        `);
+      const result = await pool.query(`
+        SELECT key, value
+        FROM settings
+        ORDER BY key
+      `);
 
-      const settings: Record<
-        string,
-        string
-      > = {};
+      const settings: Record<string, string> = {};
 
       for (const row of result.rows) {
-        settings[row.key] =
-          row.value ?? "";
+        settings[row.key] = row.value ?? "";
       }
 
       res.json(settings);
@@ -98,8 +108,7 @@ app.get(
       );
 
       res.status(500).json({
-        message:
-          "Failed to load settings.",
+        message: "Failed to load settings.",
       });
     }
   }
@@ -111,39 +120,31 @@ app.get(
 
 app.get(
   "/api/services",
-  async (
-    _req: Request,
-    res: Response
-  ) => {
+  async (_req: Request, res: Response) => {
     try {
-      const categories =
-        await pool.query(`
-          SELECT *
-          FROM service_categories
-          ORDER BY sort_order ASC, id ASC
-        `);
+      const categories = await pool.query(`
+        SELECT *
+        FROM service_categories
+        ORDER BY sort_order ASC, id ASC
+      `);
 
-      const services =
-        await pool.query(`
-          SELECT *
-          FROM services
-          WHERE is_active = true
-          ORDER BY sort_order ASC, id ASC
-        `);
+      const services = await pool.query(`
+        SELECT *
+        FROM services
+        WHERE is_active = true
+        ORDER BY sort_order ASC, id ASC
+      `);
 
-      const data =
-        categories.rows.map(
-          (category) => ({
-            ...category,
+      const data = categories.rows.map(
+        (category) => ({
+          ...category,
 
-            items:
-              services.rows.filter(
-                (service) =>
-                  service.category_id ===
-                  category.id
-              ),
-          })
-        );
+          items: services.rows.filter(
+            (service) =>
+              service.category_id === category.id
+          ),
+        })
+      );
 
       res.json(data);
     } catch (error) {
@@ -153,8 +154,7 @@ app.get(
       );
 
       res.status(500).json({
-        message:
-          "Failed to load services.",
+        message: "Failed to load services.",
       });
     }
   }
@@ -166,38 +166,31 @@ app.get(
 
 app.get(
   "/api/gallery",
-  async (
-    _req: Request,
-    res: Response
-  ) => {
+  async (_req: Request, res: Response) => {
     try {
-      const result =
-        await pool.query(`
-          SELECT
-            id,
-            url,
-            alt,
-            sort_order
-          FROM gallery_images
-          ORDER BY sort_order ASC, id ASC
-        `);
+      const result = await pool.query(`
+        SELECT
+          id,
+          url,
+          alt,
+          sort_order
+        FROM gallery_images
+        ORDER BY sort_order ASC, id ASC
+      `);
 
-      const gallery =
-        result.rows.map(
-          (image) => ({
-            id: image.id,
+      const gallery = result.rows.map(
+        (image) => ({
+          id: image.id,
 
-            url: image.url,
+          url: image.url,
 
-            src: image.url,
+          src: image.url,
 
-            alt:
-              image.alt ?? "",
+          alt: image.alt ?? "",
 
-            sort_order:
-              image.sort_order,
-          })
-        );
+          sort_order: image.sort_order,
+        })
+      );
 
       res.json(gallery);
     } catch (error) {
@@ -207,8 +200,7 @@ app.get(
       );
 
       res.status(500).json({
-        message:
-          "Failed to load gallery.",
+        message: "Failed to load gallery.",
       });
     }
   }
@@ -226,13 +218,11 @@ app.get(
 */
 
 const bookingLimiter = rateLimit({
-  windowMs:
-    15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000,
 
   limit: 5,
 
-  standardHeaders:
-    "draft-7",
+  standardHeaders: "draft-7",
 
   legacyHeaders: false,
 
@@ -251,10 +241,7 @@ app.post(
 
   bookingLimiter,
 
-  async (
-    req: Request,
-    res: Response
-  ) => {
+  async (req: Request, res: Response) => {
     try {
       const {
         name,
@@ -269,13 +256,9 @@ app.post(
          REQUIRED FIELDS
       ===================================== */
 
-      if (
-        !name ||
-        !email
-      ) {
+      if (!name || !email) {
         res.status(400).json({
-          message:
-            "Name and email are required.",
+          message: "Name and email are required.",
         });
 
         return;
@@ -285,39 +268,31 @@ app.post(
          CLEAN VALUES
       ===================================== */
 
-      const cleanName =
-        String(name).trim();
+      const cleanName = String(name).trim();
 
-      const cleanEmail =
-        String(email)
-          .trim()
-          .toLowerCase();
+      const cleanEmail = String(email)
+        .trim()
+        .toLowerCase();
 
-      const cleanPhone =
-        String(
-          phone || ""
-        ).trim();
+      const cleanPhone = String(
+        phone || ""
+      ).trim();
 
-      const cleanService =
-        String(
-          service || ""
-        ).trim();
+      const cleanService = String(
+        service || ""
+      ).trim();
 
-      const cleanNotes =
-        String(
-          notes || ""
-        ).trim();
+      const cleanNotes = String(
+        notes || ""
+      ).trim();
 
       /* =====================================
          VALIDATE EMPTY VALUES
       ===================================== */
 
-      if (
-        cleanName.length < 2
-      ) {
+      if (cleanName.length < 2) {
         res.status(400).json({
-          message:
-            "Please enter a valid name.",
+          message: "Please enter a valid name.",
         });
 
         return;
@@ -330,11 +305,7 @@ app.post(
       const emailPattern =
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      if (
-        !emailPattern.test(
-          cleanEmail
-        )
-      ) {
+      if (!emailPattern.test(cleanEmail)) {
         res.status(400).json({
           message:
             "Please enter a valid email address.",
@@ -347,53 +318,39 @@ app.post(
          LENGTH LIMITS
       ===================================== */
 
-      if (
-        cleanName.length > 100
-      ) {
+      if (cleanName.length > 100) {
         res.status(400).json({
-          message:
-            "Name is too long.",
+          message: "Name is too long.",
         });
 
         return;
       }
 
-      if (
-        cleanEmail.length > 200
-      ) {
+      if (cleanEmail.length > 200) {
         res.status(400).json({
-          message:
-            "Email is too long.",
+          message: "Email is too long.",
         });
 
         return;
       }
 
-      if (
-        cleanPhone.length > 30
-      ) {
+      if (cleanPhone.length > 30) {
         res.status(400).json({
-          message:
-            "Phone number is too long.",
+          message: "Phone number is too long.",
         });
 
         return;
       }
 
-      if (
-        cleanService.length > 150
-      ) {
+      if (cleanService.length > 150) {
         res.status(400).json({
-          message:
-            "Service is too long.",
+          message: "Service is too long.",
         });
 
         return;
       }
 
-      if (
-        cleanNotes.length > 1000
-      ) {
+      if (cleanNotes.length > 1000) {
         res.status(400).json({
           message:
             "Notes must be 1000 characters or less.",
@@ -406,54 +363,49 @@ app.post(
          INSERT BOOKING
       ===================================== */
 
-      const result =
-        await pool.query(
-          `
-          INSERT INTO bookings (
-            name,
-            email,
-            phone,
-            service,
-            preferred_date,
-            notes,
-            status
-          )
+      const result = await pool.query(
+        `
+        INSERT INTO bookings (
+          name,
+          email,
+          phone,
+          service,
+          preferred_date,
+          notes,
+          status
+        )
 
-          VALUES (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            'new'
-          )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          'new'
+        )
 
-          RETURNING *
-          `,
-          [
-            cleanName,
-            cleanEmail,
-            cleanPhone,
-            cleanService,
+        RETURNING *
+        `,
+        [
+          cleanName,
+          cleanEmail,
+          cleanPhone,
+          cleanService,
 
-            preferred_date ||
-              null,
+          preferred_date || null,
 
-            cleanNotes,
-          ]
-        );
+          cleanNotes,
+        ]
+      );
 
       /* =====================================
          SUCCESS
       ===================================== */
 
-      res
-        .status(201)
-        .json(
-          result.rows[0]
-        );
-
+      res.status(201).json(
+        result.rows[0]
+      );
     } catch (error) {
       console.error(
         "POST /api/bookings error:",
@@ -461,8 +413,7 @@ app.post(
       );
 
       res.status(500).json({
-        message:
-          "Failed to create booking.",
+        message: "Failed to create booking.",
       });
     }
   }
@@ -491,10 +442,7 @@ app.use(
 ========================================= */
 
 app.use(
-  (
-    req: Request,
-    res: Response
-  ) => {
+  (req: Request, res: Response) => {
     res.status(404).json({
       message:
         `Route not found: ${req.method} ${req.originalUrl}`,
@@ -507,9 +455,7 @@ app.use(
 ========================================= */
 
 const PORT =
-  Number(
-    process.env.PORT
-  ) || 5000;
+  Number(process.env.PORT) || 5000;
 
 app.listen(
   PORT,
