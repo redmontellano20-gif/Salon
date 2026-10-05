@@ -5,7 +5,7 @@ import {
   Navigate,
 } from "react-router-dom";
 
-import PageTitle from "./component/pageTitle";
+import PageTitle from "./component/PageTitle";
 
 import Home from "./pages/Home";
 import Services from "./pages/Services";
