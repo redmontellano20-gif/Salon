@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+
+@theme {
+  --color-ink: #17120f; /* espresso near-black — primary dark */
+  --color-ink-soft: #2a2320; /* raised dark surface */
+  --color-pearl: #f7f4f1; /* soft pearl — primary light bg */
+  --color-cream: #fbf9f7; /* lifted light surface */
+  --color-rose: #c0728a; /* dusty rose — the jewel */
+  --color-rose-deep: #7c3b4b; /* wine rose — readable accent on light */
+  --color-blush: #eed9de; /* pale blush tint */
+  --color-taupe: #5f544e; /* muted secondary text */
+  --color-line: #e4dcd6; /* hairline on light */
+
+  --font-display: "Bodoni Moda", Didot, "Times New Roman", Georgia, serif;
+  --font-sans: "Jost", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --ease-lux: cubic-bezier(0.22, 0.61, 0.24, 1);
+}
+
+/* ---------- base ---------- */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-pearl);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: var(--color-rose);
+    color: #fff;
+  }
+
+  /* anchored sections clear the fixed nav */
+  section[id] {
+    scroll-margin-top: 88px;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-rose-deep);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+}
+
+/* ---------- reusable pieces ---------- */
+@layer components {
+  /* Eyebrow: tracked, uppercase micro-label */
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 0.72rem;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--color-rose-deep);
+  }
+
+  /* Signature seam — a hairline rule with a rose diamond node */
+  .seam {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+  }
+  .seam::before,
+  .seam::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: currentColor;
+    opacity: 0.28;
+  }
+  .seam__node {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    transform: rotate(45deg);
+    background: var(--color-rose);
+  }
+
+  /* La Carte — dot-leader row between a service and its price */
+  .leader {
+    display: flex;
+    align-items: baseline;
+    gap: 0.85rem;
+    width: 100%;
+  }
+  .leader__fill {
+    flex: 1 1 auto;
+    align-self: stretch;
+    border-bottom: 1px dotted color-mix(in srgb, var(--color-taupe) 55%, transparent);
+    transform: translateY(-0.32em);
+    min-width: 1.5rem;
+  }
+
+  /* Primary button — ink fill, pearl ink text, rose on hover */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 1rem 2rem;
+    background: var(--color-ink);
+    color: var(--color-pearl);
+    border: 1px solid var(--color-ink);
+    transition:
+      background-color 0.45s var(--ease-lux),
+      color 0.45s var(--ease-lux),
+      border-color 0.45s var(--ease-lux);
+    cursor: pointer;
+  }
+  .btn:hover {
+    background: var(--color-rose-deep);
+    border-color: var(--color-rose-deep);
+    color: #fff;
+  }
+  .btn--ghost {
+    background: transparent;
+    color: var(--color-ink);
+  }
+  .btn--ghost:hover {
+    background: var(--color-ink);
+    color: var(--color-pearl);
+    border-color: var(--color-ink);
+  }
+  /* Ghost button placed on a dark surface */
+  .btn--on-dark {
+    background: transparent;
+    color: var(--color-pearl);
+    border-color: color-mix(in srgb, var(--color-pearl) 45%, transparent);
+  }
+  .btn--on-dark:hover {
+    background: var(--color-pearl);
+    color: var(--color-ink);
+    border-color: var(--color-pearl);
+  }
+
+  /* Animated underline for text links */
+  .ul-link {
+    position: relative;
+  }
+  .ul-link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -3px;
+    width: 100%;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.45s var(--ease-lux);
+  }
+  .ul-link:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+/* ---------- motion ---------- */
+@layer utilities {
+  /* Scroll reveal (toggled by IntersectionObserver via .is-in) */
+  .reveal {
+    opacity: 0;
+    transform: translateY(22px);
+    transition:
+      opacity 0.9s var(--ease-lux),
+      transform 0.9s var(--ease-lux);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Hero load-in — used with inline animation-delay */
+  .rise {
+    opacity: 0;
+    animation: rise 1.1s var(--ease-lux) forwards;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(26px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Hairline that draws itself in on load */
+  .draw {
+    transform-origin: left;
+    animation: draw 1.4s var(--ease-lux) forwards;
+  }
+  @keyframes draw {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+}
+
+/* ---------- respect reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal,
+  .rise,
+  .draw {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
