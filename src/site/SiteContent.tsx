@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -12,11 +11,9 @@ import {
   getGallery,
   getServices,
   getSettings,
-  getSiteData,
 } from "../api/client";
 
 import { getSupabase } from "../api/supabase";
-
 import { SiteContext } from "./site-context";
 import { EMPTY_SITE } from "./defaults";
 
@@ -24,336 +21,179 @@ type Props = {
   children: ReactNode;
 };
 
-export default function SiteContent({
-  children,
-}: Props) {
-  const [site, setSite] =
-    useState<SiteData>(EMPTY_SITE);
+export default function SiteContent({ children }: Props) {
+  const [site, setSite] = useState<SiteData>(EMPTY_SITE);
 
-  const mountedRef =
-    useRef(true);
+  const reloadSettings = useCallback(async () => {
+    const settings = await getSettings();
 
-  /*
-   * Small timers prevent several database
-   * events from causing many requests at once.
-   */
-  const settingsTimer =
-    useRef<ReturnType<typeof setTimeout> | null>(
-      null
-    );
+    setSite((previous) => ({
+      ...previous,
+      settings,
+    }));
+  }, []);
 
-  const galleryTimer =
-    useRef<ReturnType<typeof setTimeout> | null>(
-      null
-    );
+  const reloadGallery = useCallback(async () => {
+    const gallery = await getGallery();
 
-  const servicesTimer =
-    useRef<ReturnType<typeof setTimeout> | null>(
-      null
-    );
+    setSite((previous) => ({
+      ...previous,
+      gallery,
+    }));
+  }, []);
 
-  /* =========================================
-     INITIAL WEBSITE LOAD
-  ========================================= */
+  const reloadServices = useCallback(async () => {
+    const services = await getServices();
 
-  const loadSite =
-    useCallback(async () => {
-      try {
-        const data =
-          await getSiteData();
-
-        if (!mountedRef.current) {
-          return;
-        }
-
-        setSite(data);
-      } catch (error) {
-        console.error(
-          "Failed to load site:",
-          error
-        );
-      }
-    }, []);
-
-  /* =========================================
-     RELOAD SETTINGS ONLY
-  ========================================= */
-
-  const reloadSettings =
-    useCallback(async () => {
-      try {
-        const settings =
-          await getSettings();
-
-        if (!mountedRef.current) {
-          return;
-        }
-
-        setSite((previous) => ({
-          ...previous,
-          settings,
-        }));
-      } catch (error) {
-        console.error(
-          "Failed to refresh settings:",
-          error
-        );
-      }
-    }, []);
-
-  /* =========================================
-     RELOAD GALLERY ONLY
-  ========================================= */
-
-  const reloadGallery =
-    useCallback(async () => {
-      try {
-        const gallery =
-          await getGallery();
-
-        if (!mountedRef.current) {
-          return;
-        }
-
-        setSite((previous) => ({
-          ...previous,
-          gallery,
-        }));
-      } catch (error) {
-        console.error(
-          "Failed to refresh gallery:",
-          error
-        );
-      }
-    }, []);
-
-  /* =========================================
-     RELOAD SERVICES ONLY
-  ========================================= */
-
-  const reloadServices =
-    useCallback(async () => {
-      try {
-        const services =
-          await getServices();
-
-        if (!mountedRef.current) {
-          return;
-        }
-
-        setSite((previous) => ({
-          ...previous,
-          services,
-        }));
-      } catch (error) {
-        console.error(
-          "Failed to refresh services:",
-          error
-        );
-      }
-    }, []);
-
-  /* =========================================
-     DEBOUNCED REFRESH
-  ========================================= */
-
-  const scheduleSettingsRefresh =
-    useCallback(() => {
-      if (settingsTimer.current) {
-        clearTimeout(
-          settingsTimer.current
-        );
-      }
-
-      settingsTimer.current =
-        setTimeout(() => {
-          reloadSettings();
-        }, 100);
-    }, [reloadSettings]);
-
-  const scheduleGalleryRefresh =
-    useCallback(() => {
-      if (galleryTimer.current) {
-        clearTimeout(
-          galleryTimer.current
-        );
-      }
-
-      galleryTimer.current =
-        setTimeout(() => {
-          reloadGallery();
-        }, 100);
-    }, [reloadGallery]);
-
-  const scheduleServicesRefresh =
-    useCallback(() => {
-      if (servicesTimer.current) {
-        clearTimeout(
-          servicesTimer.current
-        );
-      }
-
-      servicesTimer.current =
-        setTimeout(() => {
-          reloadServices();
-        }, 100);
-    }, [reloadServices]);
-
-  /* =========================================
-     INITIAL LOAD + SUPABASE REALTIME
-  ========================================= */
+    setSite((previous) => ({
+      ...previous,
+      services,
+    }));
+  }, []);
 
   useEffect(() => {
-    mountedRef.current = true;
+    let active = true;
 
-    loadSite();
+    const load = async () => {
+      const results = await Promise.allSettled([
+        getSettings(),
+        getGallery(),
+        getServices(),
+      ]);
 
+      if (!active) return;
+
+      setSite((previous) => ({
+        settings:
+          results[0].status === "fulfilled"
+            ? results[0].value
+            : previous.settings,
+
+        gallery:
+          results[1].status === "fulfilled"
+            ? results[1].value
+            : previous.gallery,
+
+        services:
+          results[2].status === "fulfilled"
+            ? results[2].value
+            : previous.services,
+      }));
+
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          console.error(
+            `Initial site request ${index + 1} failed:`,
+            result.reason
+          );
+        }
+      });
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let supabase;
 
     try {
-      supabase =
-        getSupabase();
+      supabase = getSupabase();
     } catch (error) {
-      console.error(
-        "Supabase realtime unavailable:",
-        error
-      );
-
-      return () => {
-        mountedRef.current = false;
-      };
+      console.warn("Supabase Realtime unavailable:", error);
+      return;
     }
 
-    /* =====================================
-       SETTINGS CHANNEL
-    ===================================== */
+    const timers: Record<string, ReturnType<typeof setTimeout>> =
+      {};
 
-    const settingsChannel =
-      supabase
-        .channel(
-          "public-settings-realtime"
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "settings",
-          },
-          () => {
-            scheduleSettingsRefresh();
-          }
-        )
+    const schedule = (
+      key: string,
+      callback: () => Promise<void>
+    ) => {
+      if (timers[key]) {
+        clearTimeout(timers[key]);
+      }
 
-    /* =====================================
-       GALLERY CHANNEL
-    ===================================== */
+      timers[key] = setTimeout(() => {
+        void callback().catch(console.error);
+      }, 300);
+    };
 
-    const galleryChannel =
-      supabase
-        .channel(
-          "public-gallery-realtime"
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table:
-              "gallery_images",
-          },
-          () => {
-            scheduleGalleryRefresh();
-          }
-        )
+    const settingsChannel = supabase
+      .channel("salon-settings")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "settings",
+        },
+        () => {
+          schedule("settings", reloadSettings);
+        }
+      )
+      .subscribe();
 
-    /* =====================================
-       SERVICES CHANNEL
-    ===================================== */
+    const galleryChannel = supabase
+      .channel("salon-gallery")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "gallery_images",
+        },
+        () => {
+          schedule("gallery", reloadGallery);
+        }
+      )
+      .subscribe();
 
-    const servicesChannel =
-      supabase
-        .channel(
-          "public-services-realtime"
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "services",
-          },
-          () => {
-            scheduleServicesRefresh();
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table:
-              "service_categories",
-          },
-          () => {
-            scheduleServicesRefresh();
-          }
-        )
-        
-    /* =====================================
-       CLEANUP
-    ===================================== */
+    const servicesChannel = supabase
+      .channel("salon-services")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "services",
+        },
+        () => {
+          schedule("services", reloadServices);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "service_categories",
+        },
+        () => {
+          schedule("services", reloadServices);
+        }
+      )
+      .subscribe();
 
     return () => {
-      mountedRef.current = false;
+      Object.values(timers).forEach(clearTimeout);
 
-      if (
-        settingsTimer.current
-      ) {
-        clearTimeout(
-          settingsTimer.current
-        );
-      }
-
-      if (
-        galleryTimer.current
-      ) {
-        clearTimeout(
-          galleryTimer.current
-        );
-      }
-
-      if (
-        servicesTimer.current
-      ) {
-        clearTimeout(
-          servicesTimer.current
-        );
-      }
-
-      supabase.removeChannel(
-        settingsChannel
-      );
-
-      supabase.removeChannel(
-        galleryChannel
-      );
-
-      supabase.removeChannel(
-        servicesChannel
-      );
+      void supabase.removeChannel(settingsChannel);
+      void supabase.removeChannel(galleryChannel);
+      void supabase.removeChannel(servicesChannel);
     };
   }, [
-    loadSite,
-    scheduleSettingsRefresh,
-    scheduleGalleryRefresh,
-    scheduleServicesRefresh,
+    reloadSettings,
+    reloadGallery,
+    reloadServices,
   ]);
 
   return (
-    <SiteContext.Provider
-      value={site}
-    >
+    <SiteContext.Provider value={site}>
       {children}
     </SiteContext.Provider>
   );

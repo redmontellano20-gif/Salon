@@ -13,9 +13,10 @@ import adminRoutes from "./routes/admin.routes.js";
 
 const app = express();
 
-/* =========================================
-   CORS
-========================================= */
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+
+// CORS
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -23,23 +24,21 @@ const allowedOrigins = [
   "https://salon-sigma-ashy.vercel.app",
 ];
 
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(
+    process.env.FRONTEND_URL.replace(/\/$/, "")
+  );
+}
+
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests without an Origin header
-      // such as server-to-server requests and API testing.
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-
-      if (allowedOrigins.includes(origin)) {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
         return;
       }
 
       console.warn("Blocked by CORS:", origin);
-
       callback(new Error("Not allowed by CORS"));
     },
 
@@ -56,191 +55,157 @@ app.use(
       "Content-Type",
       "Authorization",
     ],
-
-    credentials: true,
   })
 );
 
-/* =========================================
-   JSON
-========================================= */
+app.use(express.json({ limit: "1mb" }));
 
-app.use(express.json());
+// HEALTH CHECK
 
-/* =========================================
-   TEST
-========================================= */
+app.get("/", (_req: Request, res: Response) => {
+  res.json({
+    message: "Salon API is working!",
+  });
+});
 
-app.get(
-  "/",
-  (_req: Request, res: Response) => {
-    res.json({
-      message: "Salon API is working!",
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({
+    status: "ok",
+  });
+});
+
+// PUBLIC SETTINGS
+
+app.get("/api/settings", async (_req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT key, value FROM settings ORDER BY key"
+    );
+
+    const settings: Record<string, string> = {};
+
+    for (const row of result.rows) {
+      settings[row.key] = row.value ?? "";
+    }
+
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=0, s-maxage=30, stale-while-revalidate=60"
+    );
+
+    res.json(settings);
+  } catch (error) {
+    console.error("Settings error:", error);
+
+    res.status(500).json({
+      message: "Failed to load settings.",
     });
   }
-);
+});
 
-/* =========================================
-   PUBLIC SETTINGS
-========================================= */
+// PUBLIC SERVICES
 
-app.get(
-  "/api/settings",
-  async (_req: Request, res: Response) => {
-    try {
-      const result = await pool.query(`
-        SELECT key, value
-        FROM settings
-        ORDER BY key
-      `);
+app.get("/api/services", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.id,
+        c.title,
+        c.note,
+        c.sort_order,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', s.id,
+              'name', s.name,
+              'detail', s.detail,
+              'price', s.price,
+              'sort_order', s.sort_order,
+              'is_active', s.is_active
+            )
+            ORDER BY s.sort_order, s.id
+          ) FILTER (WHERE s.id IS NOT NULL),
+          '[]'::json
+        ) AS items
+      FROM service_categories c
+      LEFT JOIN services s
+        ON s.category_id = c.id
+        AND s.is_active = true
+      GROUP BY
+        c.id,
+        c.title,
+        c.note,
+        c.sort_order
+      ORDER BY c.sort_order, c.id
+    `);
 
-      const settings: Record<string, string> = {};
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=0, s-maxage=30, stale-while-revalidate=60"
+    );
 
-      for (const row of result.rows) {
-        settings[row.key] = row.value ?? "";
-      }
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Services error:", error);
 
-      res.json(settings);
-    } catch (error) {
-      console.error(
-        "GET /api/settings error:",
-        error
-      );
-
-      res.status(500).json({
-        message: "Failed to load settings.",
-      });
-    }
+    res.status(500).json({
+      message: "Failed to load services.",
+    });
   }
-);
+});
 
-/* =========================================
-   PUBLIC SERVICES
-========================================= */
+// PUBLIC GALLERY
 
-app.get(
-  "/api/services",
-  async (_req: Request, res: Response) => {
-    try {
-      const categories = await pool.query(`
-        SELECT *
-        FROM service_categories
-        ORDER BY sort_order ASC, id ASC
-      `);
+app.get("/api/gallery", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, url, alt, sort_order
+      FROM gallery_images
+      ORDER BY sort_order ASC, id ASC
+    `);
 
-      const services = await pool.query(`
-        SELECT *
-        FROM services
-        WHERE is_active = true
-        ORDER BY sort_order ASC, id ASC
-      `);
+    const gallery = result.rows.map((image) => ({
+      id: image.id,
+      url: image.url,
+      src: image.url,
+      alt: image.alt ?? "",
+      sort_order: image.sort_order,
+    }));
 
-      const data = categories.rows.map(
-        (category) => ({
-          ...category,
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=0, s-maxage=30, stale-while-revalidate=60"
+    );
 
-          items: services.rows.filter(
-            (service) =>
-              service.category_id === category.id
-          ),
-        })
-      );
+    res.json(gallery);
+  } catch (error) {
+    console.error("Gallery error:", error);
 
-      res.json(data);
-    } catch (error) {
-      console.error(
-        "GET /api/services error:",
-        error
-      );
-
-      res.status(500).json({
-        message: "Failed to load services.",
-      });
-    }
+    res.status(500).json({
+      message: "Failed to load gallery.",
+    });
   }
-);
+});
 
-/* =========================================
-   PUBLIC GALLERY
-========================================= */
-
-app.get(
-  "/api/gallery",
-  async (_req: Request, res: Response) => {
-    try {
-      const result = await pool.query(`
-        SELECT
-          id,
-          url,
-          alt,
-          sort_order
-        FROM gallery_images
-        ORDER BY sort_order ASC, id ASC
-      `);
-
-      const gallery = result.rows.map(
-        (image) => ({
-          id: image.id,
-
-          url: image.url,
-
-          src: image.url,
-
-          alt: image.alt ?? "",
-
-          sort_order: image.sort_order,
-        })
-      );
-
-      res.json(gallery);
-    } catch (error) {
-      console.error(
-        "GET /api/gallery error:",
-        error
-      );
-
-      res.status(500).json({
-        message: "Failed to load gallery.",
-      });
-    }
-  }
-);
-
-/* =========================================
-   BOOKING RATE LIMIT
-========================================= */
-
-/*
-   Maximum:
-   5 booking requests
-   every 15 minutes
-   from the same IP address.
-*/
+// BOOKING RATE LIMIT
 
 const bookingLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-
   limit: 5,
-
   standardHeaders: "draft-7",
-
   legacyHeaders: false,
 
   message: {
     message:
-      "Too many booking requests. Please wait 15 minutes and try again.",
+      "Too many booking requests. Please wait 15 minutes.",
   },
 });
 
-/* =========================================
-   PUBLIC BOOKING
-========================================= */
+// PUBLIC BOOKING
 
 app.post(
   "/api/bookings",
-
   bookingLimiter,
-
   async (req: Request, res: Response) => {
     try {
       const {
@@ -250,118 +215,64 @@ app.post(
         service,
         preferred_date,
         notes,
-      } = req.body;
+      } = req.body ?? {};
 
-      /* =====================================
-         REQUIRED FIELDS
-      ===================================== */
-
-      if (!name || !email) {
-        res.status(400).json({
-          message: "Name and email are required.",
-        });
-
-        return;
-      }
-
-      /* =====================================
-         CLEAN VALUES
-      ===================================== */
-
-      const cleanName = String(name).trim();
-
-      const cleanEmail = String(email)
+      const cleanName = String(name ?? "").trim();
+      const cleanEmail = String(email ?? "")
         .trim()
         .toLowerCase();
+      const cleanPhone = String(phone ?? "").trim();
+      const cleanService = String(service ?? "").trim();
+      const cleanNotes = String(notes ?? "").trim();
 
-      const cleanPhone = String(
-        phone || ""
-      ).trim();
-
-      const cleanService = String(
-        service || ""
-      ).trim();
-
-      const cleanNotes = String(
-        notes || ""
-      ).trim();
-
-      /* =====================================
-         VALIDATE EMPTY VALUES
-      ===================================== */
-
-      if (cleanName.length < 2) {
+      if (
+        cleanName.length < 2 ||
+        cleanName.length > 100
+      ) {
         res.status(400).json({
           message: "Please enter a valid name.",
         });
-
         return;
       }
 
-      /* =====================================
-         EMAIL VALIDATION
-      ===================================== */
-
-      const emailPattern =
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-      if (!emailPattern.test(cleanEmail)) {
+      if (
+        cleanEmail.length > 200 ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
+      ) {
         res.status(400).json({
-          message:
-            "Please enter a valid email address.",
+          message: "Please enter a valid email.",
         });
-
         return;
       }
 
-      /* =====================================
-         LENGTH LIMITS
-      ===================================== */
-
-      if (cleanName.length > 100) {
+      if (
+        cleanPhone.length > 30 ||
+        cleanService.length > 150 ||
+        cleanNotes.length > 1000
+      ) {
         res.status(400).json({
-          message: "Name is too long.",
+          message: "One or more fields are too long.",
         });
-
         return;
       }
 
-      if (cleanEmail.length > 200) {
-        res.status(400).json({
-          message: "Email is too long.",
-        });
+      let bookingDate: string | null = null;
 
-        return;
+      if (preferred_date) {
+        const date = String(preferred_date);
+
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+          Number.isNaN(Date.parse(date))
+        ) {
+          res.status(400).json({
+            message: "Invalid booking date.",
+          });
+          return;
+        }
+
+        bookingDate = date;
       }
-
-      if (cleanPhone.length > 30) {
-        res.status(400).json({
-          message: "Phone number is too long.",
-        });
-
-        return;
-      }
-
-      if (cleanService.length > 150) {
-        res.status(400).json({
-          message: "Service is too long.",
-        });
-
-        return;
-      }
-
-      if (cleanNotes.length > 1000) {
-        res.status(400).json({
-          message:
-            "Notes must be 1000 characters or less.",
-        });
-
-        return;
-      }
-
-      /* =====================================
-         INSERT BOOKING
-      ===================================== */
 
       const result = await pool.query(
         `
@@ -374,17 +285,7 @@ app.post(
           notes,
           status
         )
-
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          'new'
-        )
-
+        VALUES ($1, $2, $3, $4, $5, $6, 'new')
         RETURNING *
         `,
         [
@@ -392,25 +293,14 @@ app.post(
           cleanEmail,
           cleanPhone,
           cleanService,
-
-          preferred_date || null,
-
+          bookingDate,
           cleanNotes,
         ]
       );
 
-      /* =====================================
-         SUCCESS
-      ===================================== */
-
-      res.status(201).json(
-        result.rows[0]
-      );
+      res.status(201).json(result.rows[0]);
     } catch (error) {
-      console.error(
-        "POST /api/bookings error:",
-        error
-      );
+      console.error("Booking error:", error);
 
       res.status(500).json({
         message: "Failed to create booking.",
@@ -419,49 +309,33 @@ app.post(
   }
 );
 
-/* =========================================
-   AUTH
-========================================= */
+// AUTH
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auth", authRoutes);
 
-/* =========================================
-   ADMIN
-========================================= */
+// ADMIN
 
-app.use(
-  "/api/admin",
-  adminRoutes
-);
+app.use("/api/admin", adminRoutes);
 
-/* =========================================
-   404
-========================================= */
+// 404
 
-app.use(
-  (req: Request, res: Response) => {
-    res.status(404).json({
-      message:
-        `Route not found: ${req.method} ${req.originalUrl}`,
-    });
-  }
-);
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    message:
+      `Route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
 
-/* =========================================
-   START SERVER
-========================================= */
+// EXPORT FOR VERCEL
 
-const PORT =
-  Number(process.env.PORT) || 5000;
+export default app;
 
-app.listen(
-  PORT,
-  () => {
-    console.log(
-      `Salon API running on port ${PORT}`
-    );
-  }
-);
+// LOCAL DEVELOPMENT ONLY
+
+if (process.env.VERCEL !== "1") {
+  const PORT = Number(process.env.PORT) || 5000;
+
+  app.listen(PORT, () => {
+    console.log(`Salon API running on port ${PORT}`);
+  });
+}
