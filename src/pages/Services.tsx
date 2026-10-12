@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { getSupabase } from "../api/supabase";
 import Reveal from "../component/Reveal";
@@ -15,7 +16,8 @@ type Service = {
 
 type Category = {
   id: number;
-  name: string;
+  name?: string;
+  title?: string;
   note?: string | null;
   sort_order?: number;
 };
@@ -31,7 +33,14 @@ const money = (
   price: number | string,
   prefix?: string | null
 ) => {
-  const amount = Number(price).toFixed(2);
+  const value = Number(price);
+
+  const amount = Number.isFinite(value)
+    ? value.toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : String(price);
 
   if (prefix?.toLowerCase() === "from") {
     return `from ₱${amount}`;
@@ -46,6 +55,8 @@ const Services = () => {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let active = true;
+
     const loadServices = async () => {
       try {
         const supabase = getSupabase();
@@ -56,9 +67,7 @@ const Services = () => {
             .select("*")
             .order("sort_order", { ascending: true });
 
-        if (categoryError) {
-          throw categoryError;
-        }
+        if (categoryError) throw categoryError;
 
         const { data: serviceRows, error: serviceError } =
           await supabase
@@ -67,15 +76,13 @@ const Services = () => {
             .eq("is_active", true)
             .order("sort_order", { ascending: true });
 
-        if (serviceError) {
-          throw serviceError;
-        }
+        if (serviceError) throw serviceError;
 
         const groups: ServiceGroup[] = (
           (categories ?? []) as Category[]
         ).map((category) => ({
           id: category.id,
-          title: category.name,
+          title: category.title || category.name || "",
           note: category.note ?? "",
           items: ((serviceRows ?? []) as Service[]).filter(
             (service) =>
@@ -83,143 +90,267 @@ const Services = () => {
           ),
         }));
 
-        setServices(groups);
+        if (active) {
+          setServices(groups);
+          setError("");
+        }
       } catch (err) {
         console.error("Failed to load services:", err);
 
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load services."
-        );
+        if (active) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load services."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
-    loadServices();
+    void loadServices();
+
+    return () => {
+      active = false;
+    };
   }, []);
-
-  if (loading) {
-    return (
-      <section className="bg-cream px-5 py-24 text-center">
-        <p>Loading services...</p>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className="bg-cream px-5 py-24 text-center">
-        <p className="text-rose-deep">
-          Failed to load services: {error}
-        </p>
-      </section>
-    );
-  }
 
   return (
     <section
       id="services"
-      className="bg-cream px-5 py-24 sm:px-8 md:py-32"
+      className="relative isolate overflow-hidden bg-cream px-5 py-24 sm:px-8 md:py-32"
     >
-      <div className="mx-auto max-w-[1180px]">
+      {/* SOFT LUXURY BACKGROUND */}
 
-        <Reveal className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(ellipse at 0% 10%, rgba(222,164,158,0.23), transparent 43%), radial-gradient(ellipse at 100% 85%, rgba(232,183,177,0.23), transparent 48%), linear-gradient(135deg, #faf5f1 0%, #fffaf7 50%, #f6ebe7 100%)",
+        }}
+      />
+
+      {/* DECORATIVE BLOSSOM - TOP LEFT */}
+
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 420 420"
+        className="pointer-events-none absolute -left-32 -top-24 -z-10 w-[360px] opacity-[0.15] sm:w-[450px]"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <g stroke="#b8787a" strokeWidth="1.3">
+          <path d="M210 210C145 140 120 75 190 45C250 20 280 110 210 210Z" />
+          <path d="M210 210C245 115 320 70 365 125C405 175 315 220 210 210Z" />
+          <path d="M210 210C305 185 380 245 340 310C305 365 235 300 210 210Z" />
+          <path d="M210 210C260 290 220 380 150 360C80 340 125 255 210 210Z" />
+          <path d="M210 210C115 255 40 205 70 135C100 70 180 125 210 210Z" />
+          <circle cx="210" cy="210" r="18" />
+          <circle cx="210" cy="210" r="6" />
+        </g>
+      </svg>
+
+      {/* DECORATIVE BLOSSOM - BOTTOM RIGHT */}
+
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 420 420"
+        className="pointer-events-none absolute -bottom-32 -right-32 -z-10 w-[390px] rotate-12 opacity-[0.12] sm:w-[520px]"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <g stroke="#b8787a" strokeWidth="1.2">
+          <path d="M210 210C145 140 120 75 190 45C250 20 280 110 210 210Z" />
+          <path d="M210 210C245 115 320 70 365 125C405 175 315 220 210 210Z" />
+          <path d="M210 210C305 185 380 245 340 310C305 365 235 300 210 210Z" />
+          <path d="M210 210C260 290 220 380 150 360C80 340 125 255 210 210Z" />
+          <path d="M210 210C115 255 40 205 70 135C100 70 180 125 210 210Z" />
+          <circle cx="210" cy="210" r="18" />
+        </g>
+      </svg>
+
+      {/* THIN DECORATIVE LINES */}
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 top-20 -z-10 h-px w-36 bg-gradient-to-r from-transparent to-rose/30"
+      />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-20 right-0 -z-10 h-px w-48 bg-gradient-to-l from-transparent to-rose/30"
+      />
+
+      <div className="relative z-10 mx-auto max-w-[1180px]">
+        {/* HEADER */}
+
+        <Reveal className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="eyebrow">Our Services</p>
+            <div className="flex items-center gap-3">
+              <span className="h-px w-8 bg-rose-deep/60" />
 
-            <h2 className="mt-4 font-display text-[clamp(2.4rem,6vw,4.5rem)] font-medium leading-[0.95] text-ink">
+              <p className="eyebrow">
+                Our Services
+              </p>
+            </div>
+
+            <h2 className="mt-5 font-display text-[clamp(2.6rem,6vw,4.8rem)] font-medium leading-[1.02] tracking-[-0.02em] text-ink">
               The menu
               <br />
-              of services
+              <span className="italic text-rose-deep">
+                of services
+              </span>
             </h2>
+
+            <div className="mt-7 h-px w-20 bg-rose/70" />
           </div>
 
-          <p className="max-w-xs text-sm leading-relaxed text-taupe md:text-right">
+          <p className="max-w-sm text-sm leading-[1.9] text-taupe md:text-right">
             Consultations are complimentary. Prices are a
             starting point — the final figure is quoted,
             gladly, in the chair.
           </p>
         </Reveal>
 
-        <div className="mt-16 grid gap-x-16 gap-y-16 md:mt-20 md:grid-cols-2">
+        {/* LOADING */}
 
-          {services.map((group, gi) => (
-            <Reveal
-              key={group.id}
-              delay={(gi % 2) * 90}
-            >
-              <div className="mb-6 flex items-baseline justify-between border-b border-line pb-4">
+        {loading && (
+          <div className="mt-16 flex min-h-48 items-center justify-center">
+            <p className="text-sm tracking-wide text-taupe">
+              Loading services...
+            </p>
+          </div>
+        )}
 
-                <h3 className="font-display text-3xl font-medium text-ink">
-                  {group.title}
-                </h3>
+        {/* ERROR */}
 
-                {group.note && (
-                  <span className="eyebrow !text-taupe !tracking-[0.22em]">
-                    {group.note}
-                  </span>
-                )}
+        {!loading && error && (
+          <div className="mt-16 rounded-sm border border-rose/30 bg-white/70 px-6 py-8 text-center">
+            <p className="text-sm text-rose-deep">
+              Failed to load services: {error}
+            </p>
+          </div>
+        )}
 
-              </div>
+        {/* SERVICE CARDS */}
 
-              <ul className="flex flex-col gap-6">
+        {!loading && !error && (
+          <div className="mt-16 grid gap-7 md:mt-20 md:grid-cols-2 lg:gap-10">
+            {services.map((group, gi) => (
+              <Reveal
+                key={group.id}
+                delay={(gi % 2) * 90}
+                className="h-full"
+              >
+                <div className="group relative h-full overflow-hidden border border-rose/20 bg-white/65 px-6 py-9 shadow-[0_12px_50px_rgba(100,60,60,0.045)] backdrop-blur-sm transition-all duration-500 hover:-translate-y-1 hover:border-rose/40 hover:shadow-[0_18px_60px_rgba(100,60,60,0.09)] sm:px-9 sm:py-11">
+                  {/* CARD TOP ACCENT */}
 
-                {group.items.map((item) => (
-                  <li key={item.id}>
+                  <div className="absolute left-0 top-0 h-[2px] w-20 bg-rose/60 transition-all duration-500 group-hover:w-full" />
 
-                    <div className="leader">
+                  <div className="absolute right-5 top-4 font-display text-5xl italic text-rose/10">
+                    {String(gi + 1).padStart(2, "0")}
+                  </div>
 
-                      <span className="font-display text-xl text-ink sm:text-[1.35rem]">
-                        {item.name}
-                      </span>
+                  {/* CATEGORY */}
 
-                      <span
-                        className="leader__fill"
-                        aria-hidden
-                      />
+                  <div className="relative mb-8 border-b border-rose/20 pb-6">
+                    <h3 className="font-display text-3xl font-medium text-ink sm:text-[2.1rem]">
+                      {group.title}
+                    </h3>
 
-                      <span className="font-display text-xl tabular-nums text-rose-deep sm:text-[1.35rem]">
-                        {money(
-                          item.price,
-                          item.price_prefix
-                        )}
-                      </span>
-
-                    </div>
-
-                    {item.detail && (
-                      <p className="mt-1.5 text-sm text-taupe">
-                        {item.detail}
+                    {group.note && (
+                      <p className="mt-2 text-[11px] uppercase tracking-[0.2em] text-taupe">
+                        {group.note}
                       </p>
                     )}
+                  </div>
 
-                  </li>
-                ))}
+                  {/* SERVICE ITEMS */}
 
-              </ul>
-            </Reveal>
-          ))}
+                  <ul className="relative flex flex-col gap-7">
+                    {group.items.map((item) => (
+                      <li key={item.id}>
+                        <div className="leader flex items-baseline gap-3">
+                          <span className="font-display text-lg text-ink sm:text-[1.3rem]">
+                            {item.name}
+                          </span>
 
-        </div>
+                          <span
+                            className="leader__fill min-w-3 flex-1"
+                            aria-hidden="true"
+                          />
 
-        {services.length === 0 && (
+                          <span className="shrink-0 font-display text-lg tabular-nums text-rose-deep sm:text-[1.3rem]">
+                            {money(
+                              item.price,
+                              item.price_prefix
+                            )}
+                          </span>
+                        </div>
+
+                        {item.detail && (
+                          <p className="mt-2 text-sm leading-relaxed text-taupe">
+                            {item.detail}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {group.items.length === 0 && (
+                    <p className="text-sm italic text-taupe">
+                      No available services in this category.
+                    </p>
+                  )}
+
+                  {/* CARD BOTTOM DECORATION */}
+
+                  <div className="mt-10 flex items-center gap-3 opacity-60">
+                    <span className="h-px flex-1 bg-rose/30" />
+
+                    <span className="h-1.5 w-1.5 rotate-45 border border-rose-deep/50" />
+
+                    <span className="h-px w-8 bg-rose/30" />
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        )}
+
+        {/* EMPTY STATE */}
+
+        {!loading && !error && services.length === 0 && (
           <p className="mt-16 text-center text-taupe">
             No services available.
           </p>
         )}
 
-        <Reveal className="mt-20 flex flex-col items-center gap-6 text-center">
-          <div className="seam max-w-sm text-taupe">
-            <span className="seam__node" />
-          </div>
+        {/* RESERVATION BUTTON */}
 
-          <a href="#visit" className="btn">
-            Reserve a chair
-          </a>
-        </Reveal>
+        {!loading && !error && (
+          <Reveal className="mt-20 flex flex-col items-center gap-7 text-center">
+            <p className="max-w-sm font-display text-2xl italic leading-relaxed text-taupe">
+              A little time, just for you.
+            </p>
 
+            <div className="flex w-full max-w-[260px] items-center gap-4">
+              <span className="h-px flex-1 bg-rose/50" />
+
+              <span className="h-2 w-2 rotate-45 border border-rose-deep/60" />
+
+              <span className="h-px flex-1 bg-rose/50" />
+            </div>
+
+            <a href="#visit" className="btn">
+              Reserve a chair
+            </a>
+          </Reveal>
+        )}
       </div>
     </section>
   );
